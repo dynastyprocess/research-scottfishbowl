@@ -1,0 +1,219 @@
+---
+title: "SFB Blind Bid Waivers"
+output: html_document
+editor_options: 
+  chunk_output_type: inline
+---
+
+## Correlation of early season blind bidding prices to future fantasy points/ranks - is blowing all your money early a good thing?
+
+Are we good at spending our waiver wire money?
+
+We = ScottFishBowl participants, as a proxy for the fantasy football industry
+
+------------------------------------------------------------------------
+
+Base question: average bid per player across the whole season - relationship with PPG/rank
+
+Time factor - week one/month-one bids correlate with PPG/rank
+
+Identify user patterns - are there people who churn more, or people who spend all their money, or people who save up and spend later?
+
+Position-related patterns - QB/RB/WR/TE effects/correlations
+
+Year-over-year patterns - requires namecleaning
+
+Fans - comparison of expert vs "Fan -"
+
+Split franchises into top-third/middle-third/bottom-third of overall standings performance
+
+Look at percentage of blind bid spent
+
+```{r setup}
+
+suppressPackageStartupMessages({
+  
+  options(ffscrapr.cache = "filesystem")
+  options(dplyr.summarise.inform = FALSE)
+  
+  library(tidyverse)
+  library(arrow)
+  library(ffscrapr)
+  library(janitor)
+  library(glue)
+  library(lubridate)
+  library(hrbrthemes)
+  library(GGally)
+  
+  import_roboto_condensed()
+  
+})
+
+```
+
+Load data from repo
+
+```{r}
+
+
+setwd(here::here())
+
+transactions <- open_dataset("data/transactions") %>% collect()
+
+standings <- open_dataset("data/standings") %>% collect()
+
+player_sh <- open_dataset("data/league") %>% collect() %>% 
+  filter(sfb_type == "official") %>% 
+  distinct(year, .keep_all = TRUE) %>%
+  select(year, league_id) %>% 
+  mutate(
+    scoring = map2(year,
+                   league_id, 
+                   ~ mfl_connect(.x,
+                                 .y, 
+                                 user_agent = paste0("dynastyprocess/",.y),
+                                 rate_limit_number = 2,
+                                 rate_limit_seconds = 3) %>% 
+                     ff_scoringhistory(season = .x))
+  ) %>% 
+  select(-league_id) %>% 
+  unnest(scoring) %>% 
+  left_join(dp_playerids() %>% select(gsis_id,mfl_id2 = mfl_id),
+            by = "gsis_id") %>% 
+  group_by(season, gsis_id,mfl_id,mfl_id2) %>% 
+  count() %>% 
+  ungroup() %>% 
+  transmute(mfl_id = coalesce(mfl_id2,mfl_id),
+            season,
+            n)
+
+player_scores <- open_dataset("data/league") %>% collect() %>% 
+  filter(sfb_type == "official") %>% 
+  distinct(year, .keep_all = TRUE) %>%
+  select(year, league_id) %>% 
+  mutate(
+    scoring = map2(year,
+                   league_id, 
+                   ~ mfl_connect(.x,
+                                 .y, 
+                                 user_agent = paste0("dynastyprocess/",.y),
+                                 rate_limit_number = 2,
+                                 rate_limit_seconds = 3) %>% 
+                     ff_playerscores(season = .x, week = "AVG"))
+  ) %>% 
+  select(-league_id) %>% 
+  unnest(scoring) %>% 
+  left_join(player_sh, by = c("player_id"="mfl_id","season")) %>% 
+  filter(!is.na(n), n>=4) %>% 
+  group_by(season, pos) %>% 
+  mutate(pos_rank = rank(desc(points),ties.method = "min")) %>% 
+  ungroup() %>% 
+  select(season, player_id, player_name, pos, team, points, pos_rank)
+
+
+bbid_waivers <- transactions %>% 
+  filter(sfb_type == "official",
+         type_desc == "added") %>% 
+  select(season = year,
+         timestamp,
+         league_id,
+         league_name,
+         franchise_id,
+         franchise_name,
+         bbid_spent,
+         player_id,
+         player_name,
+         pos,
+         team
+  ) %>% 
+  mutate(bbid_spent = replace_na(bbid_spent,0)) %>% 
+  left_join(
+    player_scores %>% select(season, player_id, points, pos_rank),
+    by = c("season", "player_id")
+  )
+
+```
+
+Plot raw bbid_spent against the PPG and against pos rank
+
+```{r}
+
+bbid_waivers %>% 
+  mutate(season = as.character(season)) %>% 
+  group_by(season, player_id, points, pos_rank) %>% 
+  summarise(bbid_spent = mean(bbid_spent, na.rm = TRUE)) %>% 
+  ggplot(aes(x = bbid_spent, y = points, group = season, colour = season)) +
+  geom_point(alpha = 0.2) +
+  geom_smooth(se = FALSE, method = "lm") + 
+  scale_x_log10() +
+  labs(
+    title = "Average BBID Spent vs PPG",
+    caption = "ScottFishBowl, 2016-2020"
+  ) +
+  theme_modern_rc()
+
+bbid_waivers %>% 
+  mutate(season = as.character(season)) %>% 
+  group_by(season, player_id, points, pos_rank) %>% 
+  summarise(bbid_spent = mean(bbid_spent, na.rm = TRUE)) %>% 
+  ggplot(aes(x = bbid_spent, y = pos_rank, group = season, colour = season)) +
+  geom_point(alpha = 0.2) +
+  geom_smooth(se = FALSE, method = "lm") + 
+  scale_x_log10() +
+  scale_y_reverse() +
+  labs(title = "Average BBID Spent vs Position Rank",
+       caption = "ScottFishBowl, 2016-2020") +
+  theme_modern_rc()
+
+bbid_waivers %>% 
+  mutate(season = as.character(season)) %>% 
+  group_by(season, player_id, pos, points, pos_rank) %>% 
+  summarise(bbid_spent = mean(bbid_spent, na.rm = TRUE)) %>% 
+  ggplot(aes(x = bbid_spent, y = pos_rank, group = pos, colour = pos)) +
+  geom_point(alpha = 0.2) +
+  geom_smooth(se = FALSE, method = "lm") + 
+  scale_x_log10() +
+  scale_y_reverse() +
+  coord_cartesian(ylim = c(100,0)) +
+  # ylim(c(32,0)) +
+  labs(title = "Average BBID Spent vs Position Rank",
+       subtitle = "by Position",
+       caption = "ScottFishBowl, 2016-2020") +
+  theme_modern_rc()
+
+bbid_waivers %>% 
+  mutate(season = as.factor(season)) %>% 
+  group_by(season, player_id, player_name, pos, team, points, pos_rank) %>% 
+  summarise(bbid_spent = mean(bbid_spent, na.rm = TRUE)) %>%
+  ungroup() %>% 
+  mutate(log_bbidspent = log(bbid_spent+1, base = 10)) %>%
+  # mutate(points = replace_na(points,0),
+  # pos_rank = replace_na(pos_rank, 0)) %>% 
+  # group_by(season, pos) %>% 
+  # mutate_at(c("bbid_spent","log_bbidspent","points","pos_rank"), ~ (.x -min(.x))/(max(.x)-min(.x))) %>% 
+  # ungroup() %>% 
+  select(season, player_id,player_name, pos, team, log_bbidspent, bbid_spent, points, pos_rank) %>%
+  ggpairs(columns = 6:9, ggplot2::aes(colour=pos))
+
+```
+
+How well does spending correlate with points and PPG
+
+```{r}
+
+bbid_waivers %>% 
+  mutate(season = as.character(season)) %>%
+  filter(!is.na(pos)) %>%
+  group_by(season, player_id, points, pos_rank, pos) %>% 
+  summarise(bbid_spent = mean(bbid_spent)) %>% 
+  ungroup() %>% 
+  mutate(log_bbidspent = log(bbid_spent+1, base = 10)) %>%
+  group_by(pos) %>% 
+  summarise(
+    corr_points = cor(bbid_spent, points, use = "complete.obs"),
+    corr_posrank = cor(bbid_spent, pos_rank, use = "complete.obs"),
+    corr_points_log10 = cor(log_bbidspent, points, use = "complete.obs"),
+    corr_posrank_log10 = cor(log_bbidspent, pos_rank, use = "complete.obs")
+  )
+
+```
