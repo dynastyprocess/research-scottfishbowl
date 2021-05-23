@@ -310,6 +310,11 @@ sfb_nflfastr_scoring <- nflfastr_weekly() %>%
   ) %>% 
   ungroup()
 
+# write_csv(sfb_nflfastr_scoring, here::here("data","scoring","sfb11_nflfastr_scoring.csv"))
+# arrow::write_parquet(
+  # sfb_nflfastr_scoring,
+  # here::here("data","scoring","sfb11_nflfastr_scoring.parquet"))
+
 sfb_season <- sfb_nflfastr_scoring %>% 
   group_by(season, player_id, pos) %>% 
   summarise(
@@ -352,7 +357,7 @@ sfb_vorp %>%
   geom_smooth(se = FALSE, size = 2) +
   geom_hline(yintercept = 3, color = "white", size = 2, alpha = 0.5) +
   coord_cartesian(
-    xlim = c(0,50),
+    xlim = c(0,60),
     # ylim = c(-5,25),
     expand = TRUE
   ) +
@@ -369,3 +374,9 @@ sfb_vorp %>%
     ## `geom_smooth()` using method = 'gam' and formula 'y ~ s(x, bs = "cs")'
 
 ![](kicker_vorp_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
+
+Replacement line here is calculated as 1.5 times the maximum number of
+starters, a.k.a 12 teams x 11 starters x 1.5 = 198.
+
+I like this as a measurement benchmark because it up-weights depth a
+bit.
