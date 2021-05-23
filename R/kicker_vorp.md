@@ -38,6 +38,9 @@ suppressPackageStartupMessages({
   
   library(ggridges)
   library(hrbrthemes)
+  
+  options(dplyr.summarise.inform = FALSE)
+  
 })
 
 knitr::opts_chunk$set(echo = TRUE)
@@ -85,11 +88,7 @@ kick_week <- kick_pbp %>%
   mutate(
     kicker_points = field_goal_distance * 0.1 - 3 * field_goal_misses + extra_points_made - extra_points_missed
   )
-```
 
-    ## `summarise()` has grouped output by 'season', 'week', 'kicker_player_id'. You can override using the `.groups` argument.
-
-``` r
 kick_season <- kick_week %>% 
   filter(week <=17) %>% 
   group_by(season, kicker_player_id, kicker_player_name, team) %>% 
@@ -103,8 +102,6 @@ kick_season <- kick_week %>%
   )
 ```
 
-    ## `summarise()` has grouped output by 'season', 'kicker_player_id', 'kicker_player_name'. You can override using the `.groups` argument.
-
 # Player on same team, next season/YOY
 
 ``` r
@@ -115,14 +112,19 @@ kick_season_next <- kick_season %>%
   inner_join(
     x = ., 
     y = kick_season %>% 
-      select(season, kicker_player_id, kicker_points_y1 = kicker_points, kicker_ppg_y1 = kicker_ppg),
-    by = c("next_year"="season","kicker_player_id")
+      select(season, kicker_player_id, kicker_points_y1 = kicker_points,team, kicker_ppg_y1 = kicker_ppg),
+    by = c("next_year"="season","kicker_player_id", "team")
   )
 
 kick_season_next %>% 
   ggplot(aes(x = kicker_ppg, y = kicker_ppg_y1)) +
   geom_point() +
   geom_smooth() + 
+  labs(
+    title = "Kicker Fantasy Stability",
+    subtitle = "Season Fantasy Points vs Season Fantasy Points in Y+1 \n(for players that stayed with the same team)",
+    caption = "@_TanHo | Data: nflfastR | #SFB scoring for 2010-2020"
+  ) + 
   hrbrthemes::theme_modern_rc()
 ```
 
@@ -135,10 +137,14 @@ cor(kick_season_next$kicker_ppg,
     kick_season_next$kicker_ppg_y1)
 ```
 
-    ## [1] 0.09379008
+    ## [1] 0.2411879
 
 There isn’t much stability of points per game for individual kickers who
-return to the same team next year - the correlation is \~ 0.28.
+return to the same team next year - the correlation is \~ 0.24.
+
+Don’t forget that this is a selection bias for kickers - if team kept
+their kicker from previous year, that means the kicker is at least
+passable!
 
 Comparatively, QB/RB/WR/TE PPG YOY correlation is more like 0.4-0.5 -
 and that’s not even relying on them returning to the same team.
@@ -160,11 +166,7 @@ team_kick_week <-  kick_pbp %>%
   mutate(
     kicker_points = field_goal_distance * 0.1 - 3 * field_goal_misses + extra_points_made - extra_points_missed
   )
-```
 
-    ## `summarise()` has grouped output by 'season', 'week'. You can override using the `.groups` argument.
-
-``` r
 team_kick_season <- team_kick_week %>% 
   filter(week <=17) %>% 
   group_by(season, team) %>% 
@@ -176,11 +178,7 @@ team_kick_season <- team_kick_week %>%
   mutate(
     kicker_ppg = kicker_points / games
   )
-```
 
-    ## `summarise()` has grouped output by 'season'. You can override using the `.groups` argument.
-
-``` r
 team_kick_season_next <- team_kick_season %>% 
   mutate(
     next_year = season + 1
@@ -196,6 +194,11 @@ team_kick_season_next %>%
   ggplot(aes(x = kicker_ppg, y = kicker_ppg_y1)) +
   geom_point() +
   geom_smooth() + 
+  labs(
+    title = "Team Kicking Fantasy Stability",
+    subtitle = "Season Fantasy Points vs Season Fantasy Points in Y+1",
+    caption = "@_TanHo | Data: nflfastR | #SFB scoring for 2010-2020"
+  ) + 
   hrbrthemes::theme_modern_rc()
 ```
 
@@ -230,18 +233,23 @@ kick_week_rank %>%
   filter(
     season_rank <= 16
   ) %>% 
-  ggplot(aes(x = kicker_points, y = as.factor(season_rank), color = season_rank)) +
+  mutate(season_rank = fct_rev(as.factor(season_rank))) %>% 
+  ggplot(aes(x = kicker_points, y = season_rank, fill = season_rank)) +
   geom_density_ridges(
     stat = "binline",
     bins = 50,
-    jittered_points = TRUE,
-    
+    colour = "white"
   ) + 
-  # scale_colour_brewer(type = "div") +
-  theme_modern_rc()
+  coord_cartesian(xlim = c(-5, 30)) +
+  xlab("Weekly Fantasy Points") +
+  ylab("Season End Rank") +
+  labs(
+    title = "Variance of Kicker Scoring",
+    caption = "@_TanHo | Data: nflfastR | #SFB scoring for 2010-2020"
+  ) + 
+  theme_modern_rc() +
+  theme(legend.position = "none")
 ```
-
-    ## Warning: Ignoring unknown parameters: jittered_points
 
 ![](kicker_vorp_files/figure-gfm/unnamed-chunk-4-1.png)<!-- -->
 
@@ -301,11 +309,7 @@ sfb_nflfastr_scoring <- nflfastr_weekly() %>%
     fantasy_points = sum(fantasy_points, na.rm= TRUE)
   ) %>% 
   ungroup()
-```
 
-    ## `summarise()` has grouped output by 'season', 'week', 'player_id'. You can override using the `.groups` argument.
-
-``` r
 sfb_season <- sfb_nflfastr_scoring %>% 
   group_by(season, player_id, pos) %>% 
   summarise(
@@ -327,11 +331,7 @@ sfb_season <- sfb_nflfastr_scoring %>%
     season, season_rank
   ) %>% 
   ungroup()
-```
 
-    ## `summarise()` has grouped output by 'season', 'player_id'. You can override using the `.groups` argument.
-
-``` r
 replacement_levels <- sfb_season %>% 
   filter(season_rank == 198) %>% 
   select(season, replacement_level = ppg)
@@ -356,10 +356,12 @@ sfb_vorp %>%
     # ylim = c(-5,25),
     expand = TRUE
   ) +
+  ylab("Value over Replacement (#198)") +
+  xlab("Position Rank") + 
   labs(
     title = "Kickers Don't Matter",
-    subtitle = "Value over Replacement by Position Rank, #SFB11 scoring, 2010:2020",
-    caption = "@_TanHo | Data: nflfastR"
+    subtitle = "Value over Replacement Per Game by Position Rank",
+    caption = "@_TanHo | Data: nflfastR | #SFB scoring for 2010-2020"
   ) + 
   theme_modern_rc()
 ```
