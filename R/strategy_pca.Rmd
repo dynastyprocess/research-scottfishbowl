@@ -233,7 +233,7 @@ pca_dist_median %>%
   ylab("All Play Win Percentage") + 
   labs(
     title = "Does Being Contrarian Pay?",
-    subtitle = glue::glue("...not really? Correlation is tiny (and negative): {round(cor_contrarian,3)}"),
+    subtitle = glue::glue("...unsure, but mostly no? Correlation is tiny (and negative): {round(cor_contrarian,3)}"),
     caption = "@_TanHo | Data: ffscrapr | #SFBX"
   ) +
   theme_modern_rc(base_family = "IBM Plex Sans") +
@@ -364,10 +364,16 @@ results_summary <- results %>%
 
 manual_cluster_descriptions <- tribble(
   ~ cluster, ~ cluster_description,
+  # "4", "C4: QB > WR > TE > RB",
+  # "3", "C3: WR > RB > TE > QB",
+  # "6", "C6: WR > TE > QB > RB",
+  # "1", "C1: TE > RB > WR > QB",
+  # "2", "C2: RB > QB > TE > WR",
+  # "5", "C5: RB > QB > WR > TE"
   "1", "C1: WR > TE > RB > QB",
   "2", "C2: QB > WR > RB > TE",
   "3", "C3: RB >> WR > TE > QB",
-  "4", "C4: TE > RB > QB > WR",
+  "4", "C4: TE > RB > QB > RB",
   "5", "C5: WR >> QB > TE > RB",
   "6", "C6: RB > QB > TE > WR"
 )
@@ -386,10 +392,10 @@ results %>%
   ) %>% 
   ggplot(aes(x = allplay_winpct, y = cluster_description, fill = cluster_description)) + 
   ggridges::geom_density_ridges(
-    # stat = "binline", 
-    quantile_lines = TRUE,
-    # bins = 60,
-    bandwidth = 0.02,
+    stat = "binline",
+    # quantile_lines = TRUE,
+    bins = 60,
+    # bandwidth = 0.01,
     colour = 'white') +
   geom_vline(xintercept = 0.5, size = 2, alpha = 0.5, color = "white") + 
   theme_modern_rc(base_family = "IBM Plex Sans") + 
@@ -401,8 +407,8 @@ results %>%
   xlab("All Play Percentage")+
   ylab("Cluster Description") +
   labs(
-    title = "SFB Strategy Clusters",
-    subtitle = "Distribution of AllPlay Win Percentage by Cluster",
+    title = "SFB Strategy - Distribution of AllPlay Win Pct by Cluster",
+    subtitle = "QB and WR centric strategies seem to be leading the way",
     caption = "@_TanHo | Data: ffscrapr | #SFBX"
   )
 
@@ -452,7 +458,7 @@ manual_cluster_descriptions %>%
   ylab("Cluster Description") +
   labs(
     title = "SFBX Strategy Clusters: Finalists",
-    subtitle = "The 'worse' clusters made up a huge proportion of the finalists!",
+    subtitle = "Despite regular season dominance, WR-centric did not survive to the finals...",
     caption = "@_TanHo | Data: ffscrapr | #SFBX"
   )
 
