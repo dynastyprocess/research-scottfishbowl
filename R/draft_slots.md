@@ -52,7 +52,7 @@ draft_slot_results %>%
   ylab("Draft Slot") +
   labs(
     title = "SFB Strategy - AllPlay Win Pct by Draft Slot",
-    subtitle = "QB and WR centric strategies seem to be leading the way",
+    subtitle = "Late draft slots seem at a disadvantage...and so is 1.01?",
     caption = "@_TanHo | Data: ffscrapr | SFB 2016-2020"
   )
 ```
